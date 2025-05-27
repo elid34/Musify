@@ -425,7 +425,11 @@ class _PositionSliderState extends State<PositionSlider> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: StreamBuilder<PositionData>(
-        stream: audioHandler.positionDataStream.distinct(),
+        stream: audioHandler.positionDataStream.distinct(
+            (prev, next) => // Add this if PositionData doesn't override == and hashCode
+                prev.position == next.position &&
+                prev.duration == next.duration &&
+                prev.bufferedPosition == next.bufferedPosition),
         builder: (context, snapshot) {
           final hasData = snapshot.hasData && snapshot.data != null;
           final positionData =
@@ -460,7 +464,10 @@ class _PositionSliderState extends State<PositionSlider> {
                 onChangeEnd:
                     hasData
                         ? (value) {
-                          audioHandler.seek(Duration(seconds: value.toInt()));
+                          // Only seek if the new value is different enough to avoid excessive seeks.
+                          if ((value - positionData.position.inSeconds.toDouble()).abs() > 1.0) {
+                              audioHandler.seek(Duration(seconds: value.toInt()));
+                          }
                           setState(() {
                             _isDragging = false;
                           });
