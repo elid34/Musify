@@ -63,35 +63,37 @@ class NowPlayingPage extends StatelessWidget {
           },
         ),
       ),
-      body: StreamBuilder<MediaItem?>(
-        stream: audioHandler.mediaItem.distinct((prev, curr) {
-          if (prev == null || curr == null) return false;
-          return prev.id == curr.id &&
-              prev.title == curr.title &&
-              prev.artist == curr.artist &&
-              prev.artUri == curr.artUri;
-        }),
-        builder: (context, snapshot) {
-          if (snapshot.data == null || !snapshot.hasData) {
-            return const SizedBox.shrink();
-          } else {
-            final metadata = snapshot.data!;
-            return isLargeScreen
-                ? _DesktopLayout(
-                  metadata: metadata,
-                  size: size,
-                  adjustedIconSize: adjustedIconSize,
-                  adjustedMiniIconSize: adjustedMiniIconSize,
-                )
-                : _MobileLayout(
-                  metadata: metadata,
-                  size: size,
-                  adjustedIconSize: adjustedIconSize,
-                  adjustedMiniIconSize: adjustedMiniIconSize,
-                  isLargeScreen: isLargeScreen,
-                );
-          }
-        },
+      body: SafeArea(
+        child: StreamBuilder<MediaItem?>(
+          stream: audioHandler.mediaItem.distinct((prev, curr) {
+            if (prev == null || curr == null) return false;
+            return prev.id == curr.id &&
+                prev.title == curr.title &&
+                prev.artist == curr.artist &&
+                prev.artUri == curr.artUri;
+          }),
+          builder: (context, snapshot) {
+            if (snapshot.data == null || !snapshot.hasData) {
+              return const SizedBox.shrink();
+            } else {
+              final metadata = snapshot.data!;
+              return isLargeScreen
+                  ? _DesktopLayout(
+                    metadata: metadata,
+                    size: size,
+                    adjustedIconSize: adjustedIconSize,
+                    adjustedMiniIconSize: adjustedMiniIconSize,
+                  )
+                  : _MobileLayout(
+                    metadata: metadata,
+                    size: size,
+                    adjustedIconSize: adjustedIconSize,
+                    adjustedMiniIconSize: adjustedMiniIconSize,
+                    isLargeScreen: isLargeScreen,
+                  );
+            }
+          },
+        ),
       ),
     );
   }
@@ -155,10 +157,9 @@ class _MobileLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      spacing: 10,
       children: [
-        const SizedBox(height: 10),
         NowPlayingArtwork(size: size, metadata: metadata),
-        const SizedBox(height: 10),
         if (!(metadata.extras?['isLive'] ?? false))
           NowPlayingControls(
             context: context,
@@ -169,7 +170,6 @@ class _MobileLayout extends StatelessWidget {
             metadata: metadata,
           ),
         if (!isLargeScreen) ...[
-          const SizedBox(height: 10),
           BottomActionsRow(
             context: context,
             audioId: metadata.extras?['ytid'],
@@ -177,7 +177,7 @@ class _MobileLayout extends StatelessWidget {
             iconSize: adjustedMiniIconSize,
             isLargeScreen: isLargeScreen,
           ),
-          const SizedBox(height: 35),
+          const SizedBox(height: 2),
         ],
       ],
     );
@@ -407,8 +407,16 @@ class NowPlayingControls extends StatelessWidget {
   }
 }
 
-class PositionSlider extends StatelessWidget {
+class PositionSlider extends StatefulWidget {
   const PositionSlider({super.key});
+
+  @override
+  State<PositionSlider> createState() => _PositionSliderState();
+}
+
+class _PositionSliderState extends State<PositionSlider> {
+  bool _isDragging = false;
+  double _dragValue = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -425,21 +433,40 @@ class PositionSlider extends StatelessWidget {
                   ? snapshot.data!
                   : PositionData(Duration.zero, Duration.zero, Duration.zero);
 
+          final maxDuration =
+              positionData.duration.inSeconds > 0
+                  ? positionData.duration.inSeconds.toDouble()
+                  : 1.0;
+
+          final currentValue =
+              _isDragging
+                  ? _dragValue
+                  : positionData.position.inSeconds.toDouble();
+
           return Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Slider(
-                value: positionData.position.inSeconds.toDouble(),
+                value: currentValue.clamp(0.0, maxDuration),
                 onChanged:
                     hasData
                         ? (value) {
-                          audioHandler.seek(Duration(seconds: value.toInt()));
+                          setState(() {
+                            _isDragging = true;
+                            _dragValue = value;
+                          });
                         }
                         : null,
-                max:
-                    positionData.duration.inSeconds > 0
-                        ? positionData.duration.inSeconds.toDouble()
-                        : 1.0,
+                onChangeEnd:
+                    hasData
+                        ? (value) {
+                          audioHandler.seek(Duration(seconds: value.toInt()));
+                          setState(() {
+                            _isDragging = false;
+                          });
+                        }
+                        : null,
+                max: maxDuration,
               ),
               _buildPositionRow(context, primaryColor, positionData),
             ],
